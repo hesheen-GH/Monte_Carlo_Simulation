@@ -3,6 +3,7 @@ classdef Monte_Carlo < handle
     properties %(Access = private)
         N = 1000 %default number of samples
         noise_power = 1; %default, 0 dB
+        modulation_scheme;
         sent_bits;
         recieved_bits;
         baseband_signal;
@@ -11,10 +12,20 @@ classdef Monte_Carlo < handle
         threshold;
         num_of_errors;
         BER;
+        Q_sent_bits;
+        I_sent_bits;
         
     end
     
     methods 
+        
+        function obj = set_modulation_scheme(obj,scheme)
+            obj.modulation_scheme = scheme;
+        end 
+        
+        function scheme = get_modulation_scheme(obj)
+            scheme = obj.modulation_scheme;
+        end 
         
         function BER = get_BER(obj)
             BER = obj.BER;
@@ -49,26 +60,56 @@ classdef Monte_Carlo < handle
             obj.sent_bits = round(rand(1,obj.N));       
         end 
         
-        function obj = generate_baseband_signal(obj,scheme)
+        
+        function obj = generate_Quadrature_Inphase_bits(obj)
+            %generate even,odd Q,I
+            obj.Q_sent_bits = obj.sent_bits(2:2:end);
+            obj.I_sent_bits = obj.sent_bits(1:2:end);
+              
+        end 
+            
+        
+        function obj = generate_baseband_signal(obj)
             %generates baseband BPSK signal +1 or -1
             
-            switch scheme
+            switch obj.modulation_scheme
                 case 'BPSK'
                     obj.baseband_signal = 2.*obj.sent_bits-1;
                 
                 %for the same energy per bit, the relation between OOK and
                 %BPSK is A_ook  = sqrt(2)*A_bpsk (refer to claude's notes)
                 case 'OOK'
-                    obj.baseband_signal = sqrt(2).*obj.sent_bits; 
+                    obj.baseband_signal = sqrt(2).*obj.sent_bits;
+                    
+                case 'QPSK'
+                    %generate phasor
+                    obj.baseband_signal =  (2.*obj.I_sent_bits-1)+i*(2.*obj.Q_sent_bits-1);
+                 
                     
             end 
               
         end 
         
+        
         function obj = generate_AWGN(obj)
             %awgn generation
             rng(0,'twister');
-            obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N);  
+            
+            switch obj.modulation_scheme
+                case 'BPSK'
+                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N);  
+                   
+                case 'OOK'
+                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N);  
+
+                case 'QPSK'
+                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N/2) + ...
+                   i*sqrt(obj.noise_power)*randn(1,obj.N/2);
+                   
+            end 
+
+                    
+            
         end 
         
         function obj = generate_recieved_signal(obj)
@@ -79,17 +120,60 @@ classdef Monte_Carlo < handle
         function obj = reciever(obj)
             %output of reciever and deciding binary output based on threshold
             %if signal == threshold, randomly choose 0 or 1
-            threshold_signals = obj.Rx_signal==obj.threshold;
-            r = 2*randi([0 1],nnz(threshold_signals),1,1)-1;
-            obj.Rx_signal(threshold_signals)=r;
+            
+            switch obj.modulation_scheme
+                
+                case 'BPSK'
+                    threshold_signals = obj.Rx_signal==obj.threshold;
+                    r = 2*randi([0 1],nnz(threshold_signals),1,1)-1;
+                    obj.Rx_signal(threshold_signals)=r;
+                    obj.recieved_bits = obj.Rx_signal > obj.threshold;
+                
+                case 'OOK'
+                    threshold_signals = obj.Rx_signal==obj.threshold;
+                    r = sqrt(2)*randi([0 1],nnz(threshold_signals),1,1);
+                    obj.Rx_signal(threshold_signals)=r;
+                    obj.recieved_bits = obj.Rx_signal > obj.threshold;
+                    
+                case 'QPSK'
+                    
+                    constellation_points = [sqrt(2)*exp(i*pi/4),sqrt(2)*exp(i*3*pi/4), ...
+                        sqrt(2)*exp(i*5*pi/4),sqrt(2)*exp(i*7*pi/4)];
+                    
+                    obj.recieved_bits = [];
+                    
+                    for k=1:length(obj.Rx_signal)
                         
-               %for i=1:size(signal)
-               %    if signal(i) == 0
-               %        signal(i) = 2*randi([0 1])-1;
-               %    end 
-               %end 
-           
-            obj.recieved_bits = obj.Rx_signal > obj.threshold;
+                        distance = abs(constellation_points-obj.Rx_signal(k));
+                        [min_distance, index] = min(distance);
+                        
+                        switch index
+                            case 1
+                                obj.recieved_bits(end+1) = 1;
+                                obj.recieved_bits(end+1) = 1;
+                                
+                            case 2
+                                obj.recieved_bits(end+1) = 0;
+                                obj.recieved_bits(end+1) = 1;
+                                
+                            case 3
+                                obj.recieved_bits(end+1) = 0;
+                                obj.recieved_bits(end+1) = 0;
+                                
+                            case 4
+                                obj.recieved_bits(end+1) = 1;
+                                obj.recieved_bits(end+1) = 0;
+
+                        end 
+                        
+                    end 
+                        
+                
+                 
+            end
+            
+            
+            
         end 
         
         function obj = error_counter(obj)
@@ -101,7 +185,23 @@ classdef Monte_Carlo < handle
             obj.BER = (1/obj.N)*obj.num_of_errors;
         end 
         
-        function obj = plot_BER_vs_SNR(obj,scheme)
+        function BER_theoretical = compute_theoretical_BER(obj,SNR)
+            
+            switch obj.modulation_scheme
+                   
+                case 'BPSK'
+                    BER_theoretical = qfunc(sqrt(2*10.^(SNR/10)));
+                        
+                case 'OOK'
+                    BER_theoretical = qfunc(sqrt(10.^(SNR/10)));
+                        
+                case 'QPSK'
+                    BER_theoretical = qfunc(sqrt(2*10.^(SNR/10)));
+            end 
+            
+        end 
+        
+        function obj = plot_BER_vs_SNR(obj)
             
             SNR = 0:1:10; %in dB
             BER_experimental = [];
@@ -109,26 +209,18 @@ classdef Monte_Carlo < handle
             
             for i=1:length(SNR)
                 
-                
-                
                 obj.noise_power = 1/(2*10.^(SNR(i)/10)); %assuming Eb = 1;
                 obj.generate_2_level_RandomBits();
-                obj.generate_baseband_signal(scheme);
+                obj.generate_Quadrature_Inphase_bits();
+                obj.generate_baseband_signal();
                 obj.generate_AWGN();
                 obj.generate_recieved_signal();
-                obj.reciever();
+                obj.reciever()
                 obj.error_counter();
                 obj.compute_error_probability();
                 BER_experimental(i) = obj.BER;
+                BER_theoretical(i) = obj.compute_theoretical_BER(SNR(i));
                 
-                switch scheme
-                   
-                    case 'BPSK'
-                        BER_theoretical(i) = qfunc(sqrt(2*10.^(SNR(i)/10)));
-                        
-                    case 'OOK'
-                        BER_theoretical(i) = qfunc(sqrt(10.^(SNR(i)/10)));
-                end 
             end 
               
             figure;
@@ -136,7 +228,7 @@ classdef Monte_Carlo < handle
             ylim([10^-6 0.1]);
             hold on;
             semilogy(SNR,BER_theoretical);
-            legend(string(scheme) + ' Experimental BER', string(scheme) + ' Theoretical BER');
+            legend(string(obj.modulation_scheme) + ' Experimental BER', string(obj.modulation_scheme) + ' Theoretical BER');
             hold off;
                
         end 
