@@ -7,6 +7,6 @@ Noise Channel (AWGN). The modulation schemes that are supported are BPSK, OOK, Q
 
 ## How to run
 
-Simply call modulation scheme of choice, for example BPSK.m
+Simply call modulation scheme of choice, for example BPSK.m. Please note simulation could take time especially after exceeding 100,000 samples
 
 ## The simulation block diagram is shown below:
