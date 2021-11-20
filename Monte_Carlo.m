@@ -10,8 +10,10 @@ classdef Monte_Carlo < handle
         AWGN;
         Rx_signal;
         threshold;
-        num_of_errors;
+        num_of_bit_errors;
+        num_of_symbol_errors;
         BER;
+        SER;
         Q_sent_bits;
         I_sent_bits;
         
@@ -176,13 +178,29 @@ classdef Monte_Carlo < handle
             
         end 
         
-        function obj = error_counter(obj)
-            %counts number of errors by comparing sent with recieved bits
-            obj.num_of_errors = sum(obj.sent_bits~=obj.recieved_bits);     
+        function obj = symbol_error_counter(obj)
+            
+            %count every 2 bits = symbol
+            
+            obj.num_of_symbol_errors = sum((string(obj.sent_bits(1:2:end)) ... 
+                + string(obj.sent_bits(2:2:end))) ~= (string(obj.recieved_bits(1:2:end)) ... 
+                + string(obj.recieved_bits(2:2:end))));
+               
         end 
         
-        function obj = compute_error_probability(obj)
-            obj.BER = (1/obj.N)*obj.num_of_errors;
+        
+        function obj = compute_symbol_error_probability(obj)
+            
+            obj.SER = (1/(obj.N/2))*obj.num_of_symbol_errors;
+        end 
+        
+        function obj = bit_error_counter(obj)
+            %counts number of errors by comparing sent with recieved bits
+            obj.num_of_bit_errors = sum(obj.sent_bits~=obj.recieved_bits);     
+        end 
+      
+        function obj = compute_bit_error_probability(obj)
+            obj.BER = (1/obj.N)*obj.num_of_bit_errors;
         end 
         
         function BER_theoretical = compute_theoretical_BER(obj,SNR)
@@ -201,11 +219,25 @@ classdef Monte_Carlo < handle
             
         end 
         
+        
+        function SER_theoretical = compute_theoretical_SER(obj,SNR)
+            
+            switch obj.modulation_scheme
+                     
+                case 'QPSK'
+                    SER_theoretical = erfc(sqrt(10.^(SNR/10)))- ...
+                        (1/4)*(erfc(sqrt(10.^(SNR/10))))^2;
+            end 
+            
+        end 
+        
         function obj = plot_BER_vs_SNR(obj)
             
             SNR = 0:1:10; %in dB
             BER_experimental = [];
             BER_theoretical = [];
+            SER_experimental = [];
+            SER_theoretical = [];
             
             for i=1:length(SNR)
                 
@@ -216,8 +248,20 @@ classdef Monte_Carlo < handle
                 obj.generate_AWGN();
                 obj.generate_recieved_signal();
                 obj.reciever()
-                obj.error_counter();
-                obj.compute_error_probability();
+                obj.symbol_error_counter();
+                obj.compute_symbol_error_probability();
+                obj.bit_error_counter();
+                obj.compute_bit_error_probability();
+                
+                switch obj.modulation_scheme
+                
+                    case 'QPSK'
+                    
+                        SER_experimental(i) = obj.SER;
+                        SER_theoretical(i) = obj.compute_theoretical_SER(SNR(i));
+                    
+                end 
+                
                 BER_experimental(i) = obj.BER;
                 BER_theoretical(i) = obj.compute_theoretical_BER(SNR(i));
                 
@@ -228,10 +272,28 @@ classdef Monte_Carlo < handle
             ylim([10^-6 0.1]);
             hold on;
             semilogy(SNR,BER_theoretical);
-            legend(string(obj.modulation_scheme) + ' Experimental BER', string(obj.modulation_scheme) + ' Theoretical BER');
+            hold on;
+            
+            switch obj.modulation_scheme
+                
+                case 'QPSK'
+                
+                    semilogy(SNR,SER_experimental);
+                    hold on;
+                    semilogy(SNR,SER_theoretical);
+                    legend(string(obj.modulation_scheme) + ' Experimental BER', string(obj.modulation_scheme) + ' Theoretical BER' , ...
+                        string(obj.modulation_scheme) + ' Experimental SER', string(obj.modulation_scheme) + ' Theoretical SER'); 
+                    
+                otherwise 
+                    legend(string(obj.modulation_scheme) + ' Experimental BER', string(obj.modulation_scheme) + ' Theoretical BER');
+
+
+            end 
+                       
             hold off;
                
         end 
+        
         
     end 
     
