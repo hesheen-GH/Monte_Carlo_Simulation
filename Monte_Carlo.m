@@ -11,7 +11,7 @@ classdef Monte_Carlo < handle
         Rx_signal;
         threshold;
         num_of_bit_errors;
-        num_of_symbol_errors;
+        num_of_symbol_errors = [];
         BER;
         SER;
         Q_sent_bits;
@@ -32,15 +32,7 @@ classdef Monte_Carlo < handle
         function BER = get_BER(obj)
             BER = obj.BER;
         end 
-        
-        function obj = set_threshold(obj,threshold)
-            obj.threshold = threshold;
-        end 
-        
-        function threshold = get_threshold(obj)
-            threshold = obj.threshold;
-        end 
-        
+              
         function obj = set_noise_power(obj,power)
             obj.noise_power = power;
         end 
@@ -67,7 +59,7 @@ classdef Monte_Carlo < handle
             %generate even,odd Q,I
             obj.Q_sent_bits = obj.sent_bits(2:2:end);
             obj.I_sent_bits = obj.sent_bits(1:2:end);
-              
+                        
         end 
            
         
@@ -156,18 +148,18 @@ classdef Monte_Carlo < handle
             
             switch obj.modulation_scheme
                 case 'BPSK'
-                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N);  
+                   obj.AWGN = sqrt(obj.noise_power).*randn(1,obj.N);  
                    
                 case 'OOK'
-                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N);  
+                   obj.AWGN = sqrt(obj.noise_power).*randn(1,obj.N);  
 
                 case 'QPSK'
-                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N/2) + ...
-                   i*sqrt(obj.noise_power)*randn(1,obj.N/2);
+                   obj.AWGN = sqrt(obj.noise_power).*randn(1,obj.N/2) + ...
+                   i*sqrt(obj.noise_power).*randn(1,obj.N/2);
                
                 case '16-QAM'
-                   obj.AWGN = sqrt(obj.noise_power)*randn(1,obj.N/4) + ...
-                   i*sqrt(obj.noise_power)*randn(1,obj.N/4);    
+                   obj.AWGN = sqrt(obj.noise_power).*randn(1,obj.N/4) + ...
+                   i*sqrt(obj.noise_power).*randn(1,obj.N/4);    
             end    
         end 
         
@@ -183,160 +175,74 @@ classdef Monte_Carlo < handle
             switch obj.modulation_scheme
                 
                 case 'BPSK'
-                    threshold_signals = obj.Rx_signal==obj.threshold;
-                    r = 2*randi([0 1],nnz(threshold_signals),1,1)-1;
-                    obj.Rx_signal(threshold_signals)=r;
-                    obj.recieved_bits = obj.Rx_signal > obj.threshold;
-                
+                    
+                    constellation_points = [-1;1];
+                    obj.recieved_bits = [];
+                    distance = abs(bsxfun(@minus,constellation_points,reshape(obj.Rx_signal.',[1,size(obj.Rx_signal.')])));
+                    [min_distance, index] = min(distance);
+                    
+                    obj.recieved_bits = dec2bin(index-1,1);
+                    obj.recieved_bits = reshape(obj.recieved_bits',[1 size(obj.recieved_bits,1)*size(obj.recieved_bits,2)]);
+                    obj.recieved_bits = num2cell(obj.recieved_bits(:))';
+                    obj.recieved_bits = sscanf(sprintf(' %s',obj.recieved_bits{:}),'%f',[1,Inf]);
+                    [row,column,height] = size(index);
+                    
+                    obj.recieved_bits = reshape(obj.recieved_bits,column,[]).';
+                                 
                 case 'OOK'
-                    threshold_signals = obj.Rx_signal==obj.threshold;
-                    r = sqrt(2)*randi([0 1],nnz(threshold_signals),1,1);
-                    obj.Rx_signal(threshold_signals)=r;
-                    obj.recieved_bits = obj.Rx_signal > obj.threshold;
+                    
+                    constellation_points = [0;sqrt(2)];
+                    obj.recieved_bits = [];
+                    distance = abs(bsxfun(@minus,constellation_points,reshape(obj.Rx_signal.',[1,size(obj.Rx_signal.')])));
+                    [min_distance, index] = min(distance);
+                    
+                    obj.recieved_bits = dec2bin(index-1,1);
+                    obj.recieved_bits = reshape(obj.recieved_bits',[1 size(obj.recieved_bits,1)*size(obj.recieved_bits,2)]);
+                    obj.recieved_bits = num2cell(obj.recieved_bits(:))';
+                    obj.recieved_bits = sscanf(sprintf(' %s',obj.recieved_bits{:}),'%f',[1,Inf]);
+                    [row,column,height] = size(index);
+                    
+                    obj.recieved_bits = reshape(obj.recieved_bits,column,[]).';
                     
                 case 'QPSK'
-                    
-                    constellation_points = [sqrt(2)*exp(i*pi/4),sqrt(2)*exp(i*3*pi/4), ...
-                        sqrt(2)*exp(i*5*pi/4),sqrt(2)*exp(i*7*pi/4)];
+                      
+                    constellation_points = [-1-i;-1+i;1-i;1+i];
                     
                     obj.recieved_bits = [];
                     
-                    for k=1:length(obj.Rx_signal)
-                        
-                        distance = abs(constellation_points-obj.Rx_signal(k));
-                        [min_distance, index] = min(distance);
-                        
-                        switch index
-                            case 1
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 2
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 3
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 4
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-
-                        end 
-                        
-                    end 
                     
+                    distance = abs(bsxfun(@minus,constellation_points,reshape(obj.Rx_signal.',[1,size(obj.Rx_signal.')])));
+
+                    [min_distance, index] = min(distance);
+                    
+                    obj.recieved_bits = dec2bin(index-1,2);
+                    obj.recieved_bits = reshape(obj.recieved_bits',[1 size(obj.recieved_bits,1)*size(obj.recieved_bits,2)]);
+                    obj.recieved_bits = num2cell(obj.recieved_bits(:))';
+                    obj.recieved_bits = sscanf(sprintf(' %s',obj.recieved_bits{:}),'%f',[1,Inf]);
+                    
+                    [row,column,height] = size(index);
+                    
+                    obj.recieved_bits = reshape(obj.recieved_bits,2*column,[]).';
+                                             
                 case '16-QAM'
                     
-                    constellation_points = [-3+3i,-3+1i,-3-3i,-3-1i,-1+3i,-1+1i, ...
-                        -1-3i,-1-1i,3+3i,3+1i,3-3i,3-1i,1+3i,1+1i,1-3i,1-1i];
+                    constellation_points = [-3+3i;-3+1i;-3-3i;-3-1i;-1+3i;-1+1i; ...
+                        -1-3i;-1-1i;3+3i;3+1i;3-3i;3-1i;1+3i;1+1i;1-3i;1-1i];
                                 
                     obj.recieved_bits = [];
                     
-                    for k=1:length(obj.Rx_signal)
-                        
-                        distance = abs(constellation_points-obj.Rx_signal(k));
-                        [min_distance, index] = min(distance);
-                        
-                        switch index
-                            case 1
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
+                    distance = abs(bsxfun(@minus,constellation_points,reshape(obj.Rx_signal.',[1,size(obj.Rx_signal.')])));
 
-                            case 2
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 3
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 4
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 5
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 6
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 7
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
+                    [min_distance, index] = min(distance);
                     
-                            case 8
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 9
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 10
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 11
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 12
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 13
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 14
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                obj.recieved_bits(end+1) = 1;
-                                
-                            case 15
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 0;
-                                
-                            case 16
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                                obj.recieved_bits(end+1) = 1;
-                        end
-                    end
+                    obj.recieved_bits = dec2bin(index-1,4);
+                    obj.recieved_bits = reshape(obj.recieved_bits',[1 size(obj.recieved_bits,1)*size(obj.recieved_bits,2)]);
+                    obj.recieved_bits = num2cell(obj.recieved_bits(:))';
+                    obj.recieved_bits = sscanf(sprintf(' %s',obj.recieved_bits{:}),'%f',[1,Inf]);
+                    
+                    [row,column,height] = size(index);
+                    
+                    obj.recieved_bits = reshape(obj.recieved_bits,4*column,[]).';
             end   
         end 
         
@@ -347,17 +253,25 @@ classdef Monte_Carlo < handle
             switch obj.modulation_scheme
             
                 case 'QPSK'
-                    obj.num_of_symbol_errors = sum((string(obj.sent_bits(1:2:end)) ... 
-                    + string(obj.sent_bits(2:2:end))) ~= (string(obj.recieved_bits(1:2:end)) ... 
-                    + string(obj.recieved_bits(2:2:end))));
+                    
+                    obj.num_of_symbol_errors = bitxor(obj.sent_bits,obj.recieved_bits);
+                    symbols = string(obj.num_of_symbol_errors(:,1:2:end)) + string(obj.num_of_symbol_errors(:,2:2:end));
+                                        
+                    obj.num_of_symbol_errors = sum(count(symbols,'11'),2) + ...
+                        sum(count(symbols,'10'),2) + sum(count(symbols,'01'),2);
                 
                 case '16-QAM'
-                    obj.num_of_symbol_errors = sum((string(obj.sent_bits(1:4:end))+ ... 
-                        string(obj.sent_bits(2:4:end)) + string(obj.sent_bits(3:4:end))+ ...
-                        string(obj.sent_bits(4:4:end))) ~= (string(obj.recieved_bits(1:4:end))+ ... 
-                        string(obj.recieved_bits(2:4:end)) + string(obj.recieved_bits(3:4:end))+ ...
-                        string(obj.recieved_bits(4:4:end))));
-                
+                    obj.num_of_symbol_errors = bitxor(obj.sent_bits,obj.recieved_bits);
+                    symbols = string(obj.num_of_symbol_errors(:,1:4:end)) + string(obj.num_of_symbol_errors(:,2:4:end)) ...
+                         + string(obj.num_of_symbol_errors(:,3:4:end)) + string(obj.num_of_symbol_errors(:,4:4:end));
+                                        
+                    obj.num_of_symbol_errors = sum(count(symbols,'0001'),2) + ...
+                        sum(count(symbols,'0010'),2) + sum(count(symbols,'0011'),2) + ...
+                        sum(count(symbols,'0100'),2) + sum(count(symbols,'0101'),2) + ...
+                        sum(count(symbols,'0110'),2) + sum(count(symbols,'0111'),2) + ...
+                        sum(count(symbols,'1000'),2) + sum(count(symbols,'1001'),2) + ...
+                        sum(count(symbols,'1010'),2) + sum(count(symbols,'1011'),2) + ...
+                        sum(count(symbols,'1110'),2) + sum(count(symbols,'1111'),2);
             end 
 
         end 
@@ -368,21 +282,24 @@ classdef Monte_Carlo < handle
             switch obj.modulation_scheme
                 
                 case 'QPSK'
-                    obj.SER = (1/(obj.N/2))*obj.num_of_symbol_errors;
+                    obj.SER = (1/(obj.N/2)).*obj.num_of_symbol_errors;
                     
                 case '16-QAM'
-                    obj.SER = (1/(obj.N/4))*obj.num_of_symbol_errors;  
+                    obj.SER = (1/(obj.N/4)).*obj.num_of_symbol_errors;  
             end 
             
         end 
         
         function obj = bit_error_counter(obj)
             %counts number of errors by comparing sent with recieved bits
-            obj.num_of_bit_errors = sum(obj.sent_bits~=obj.recieved_bits);     
+            
+            obj.num_of_bit_errors = bitxor(obj.sent_bits,obj.recieved_bits);
+            obj.num_of_bit_errors = sum(obj.num_of_bit_errors,2);
+
         end 
       
         function obj = compute_bit_error_probability(obj)
-            obj.BER = (1/obj.N)*obj.num_of_bit_errors;
+            obj.BER = (1/obj.N).*obj.num_of_bit_errors;
         end 
         
         function BER_theoretical = compute_theoretical_BER(obj,SNR)
@@ -411,7 +328,7 @@ classdef Monte_Carlo < handle
                      
                 case 'QPSK'
                     SER_theoretical = erfc(sqrt(10.^(SNR/10)))- ...
-                        (1/4)*(erfc(sqrt(10.^(SNR/10))))^2; %Es = 2Eb
+                        (1/4)*(erfc(sqrt(10.^(SNR/10)))).^2; %Es = 2Eb
                 
                 case '16-QAM'
                     SER_theoretical = (3/2)*erfc(sqrt((4/10)*10.^(SNR/10))); %approximation Es=4Eb
@@ -422,53 +339,44 @@ classdef Monte_Carlo < handle
         
         function obj = plot_BER_vs_SNR(obj)
             
-            SNR = 0:1:20; %in dB
-            BER_experimental = [];
+            SNR = 0:0.1:20; %in dB
             BER_theoretical = [];
-            SER_experimental = [];
             SER_theoretical = [];
             
-            for i=1:length(SNR)
-                
-                switch obj.modulation_scheme
+            obj.generate_2_level_RandomBits();
+            obj.generate_Quadrature_Inphase_bits();
+            obj.generate_baseband_signal();
+            
+            switch obj.modulation_scheme
                    
                     case '16-QAM'
                         % Eb = Es/log2(M), Es = 10 for 16-QAM
-                        obj.noise_power = 2.5/(2*10.^(SNR(i)/10));    
+                        obj.noise_power = (2.5./(2*10.^(SNR/10)))';    
                      
                     otherwise
                         %For QPSK, Es = 2, Eb = 1
-                        obj.noise_power = 1/(2*10.^(SNR(i)/10)); %assuming Eb=1
-                        
-                    
-                end
-                
-                obj.generate_2_level_RandomBits();
-                obj.generate_Quadrature_Inphase_bits();
-                obj.generate_baseband_signal();
-                obj.generate_AWGN();
-                obj.generate_recieved_signal();
-                obj.reciever()
-                obj.symbol_error_counter();
-                obj.compute_symbol_error_probability();
-                obj.bit_error_counter();
-                obj.compute_bit_error_probability();
-                
-                
-                if (strcmp(obj.modulation_scheme,'QPSK') || strcmp(obj.modulation_scheme,'16-QAM'))
-                
-                    SER_experimental(i) = obj.SER;
-                    SER_theoretical(i) = obj.compute_theoretical_SER(SNR(i));
-                        
-                end 
-                
-                BER_experimental(i) = obj.BER;
-                BER_theoretical(i) = obj.compute_theoretical_BER(SNR(i));
-                
-            end 
-              
+                        obj.noise_power = (1./(2*10.^(SNR/10)))'; %assuming Eb=1
+                                 
+            end
+            
+            obj.generate_AWGN();
+            obj.generate_recieved_signal();
+            obj.reciever()
+            obj.symbol_error_counter();
+            obj.compute_symbol_error_probability();
+            obj.bit_error_counter();
+            obj.compute_bit_error_probability();
+            
+            BER_theoretical = obj.compute_theoretical_BER(SNR);
+            
+            if (strcmp(obj.modulation_scheme,'QPSK') || strcmp(obj.modulation_scheme,'16-QAM'))
+            
+                SER_theoretical = obj.compute_theoretical_SER(SNR);
+            
+            end
+            
             figure;
-            semilogy(SNR,BER_experimental,'LineWidth',1);
+            semilogy(SNR,obj.BER','LineWidth',1);
             ylim([10^-6 0.1]);
             xlim([0 20]);
             hold on;
@@ -478,9 +386,9 @@ classdef Monte_Carlo < handle
             if (strcmp(obj.modulation_scheme,'QPSK') || strcmp(obj.modulation_scheme,'16-QAM'))
 
                 
-                semilogy(SNR,SER_experimental,'LineWidth',1);
+                semilogy(SNR,obj.SER','LineWidth',1);
                 hold on;
-                semilogy(SNR,SER_theoretical,'LineWidth',1);
+                semilogy(SNR,SER_theoretical,'LineWidth',1);              
                 legend(string(obj.modulation_scheme) + ' Experimental BER', string(obj.modulation_scheme) + ' Theoretical BER' , ...
                 string(obj.modulation_scheme) + ' Experimental SER', string(obj.modulation_scheme) + ' Theoretical SER'); 
                 title(string(obj.modulation_scheme) + ' BER and Symbol Error Rate (SER) in AWGN Channel')    
@@ -493,11 +401,7 @@ classdef Monte_Carlo < handle
             ylabel('Probability');
             grid on;
             hold off;
-               
+            
         end 
-        
-        
-    end 
-    
-    
+    end
 end 
